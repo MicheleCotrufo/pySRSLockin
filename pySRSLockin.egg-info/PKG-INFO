@@ -1,0 +1,13 @@
+Metadata-Version: 2.1
+Name: pySRSLockin
+Version: 0.20rc1
+Summary: A python library/GUI to access and control different models of lock-in amplifiers made by SRS.
+Home-page: https://github.com/MicheleCotrufo/
+Author: Michele Cotrufo
+Author-email: michele.cotrufo@gmail.com
+License: MIT
+Platform: UNKNOWN
+Description-Content-Type: text/markdown
+
+UNKNOWN
+

@@ -1,0 +1,5 @@
+abstract_instrument_interface
+PyQt5>=5.15.6
+pyqtgraph
+pyvisa
+numpy
