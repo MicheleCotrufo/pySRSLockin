@@ -67,12 +67,12 @@ class interface(abstract_instrument_interface.abstract_interface):
 
 
     ## SIGNALS THAT WILL BE USED TO COMMUNICATE WITH THE GUI
-    #                                                                   | Triggered when ...                                        | Parameter(s) Sent  
+    #                                                                   | Triggered when ...                                                            | Parameter(s) Sent  
     #                                                               #   -----------------------------------------------------------------------------------------------------------------------         
-    sig_list_devices_updated = QtCore.pyqtSignal(list)              #   | List of devices is updated                                | List of devices   
-    sig_refreshtime = QtCore.pyqtSignal(float)                      #   | Refresh time is changed                                   | New value of refresh time
-    sig_reading = QtCore.pyqtSignal(int)                            #   | Reading status changes                                    | 1 = Started Reading, 2 = Paused Reading, 3 Stopped Reading 
-    sig_updated_data = QtCore.pyqtSignal(object)                    #   | Data is read from instrument                              | Acquired data 
+    sig_list_devices_updated = QtCore.pyqtSignal(list)              #   | List of devices is updated                                                    | List of devices   
+    sig_refreshtime = QtCore.pyqtSignal(float)                      #   | Refresh time is changed                                                       | New value of refresh time
+    sig_reading = QtCore.pyqtSignal(int)                            #   | Reading status changes                                                        | 1 = Started Reading, 2 = Paused Reading, 3 Stopped Reading 
+    sig_updated_data = QtCore.pyqtSignal(object)                    #   | Data is read from instrument                                                  | Acquired data 
     sig_read_available_time_constants = QtCore.pyqtSignal(list)     #
     sig_read_available_sensitivities = QtCore.pyqtSignal(list)      #
     sig_set_time_constant = QtCore.pyqtSignal(int)                  #
@@ -80,6 +80,7 @@ class interface(abstract_instrument_interface.abstract_interface):
     sig_set_sensitivity = QtCore.pyqtSignal(int)                    #list of two integers, first is integer index of sensitivity, second is numerical value of sensitivity
     sig_read_sensitivity = QtCore.pyqtSignal(list)                  #list of two integers, first is integer index of sensitivity, second is numerical value of sensitivity
     sig_sensitivity_auto_change = QtCore.pyqtSignal(bool) 
+    sig_data_to_read = QtCore.pyqtSignal(str,bool)                  #   | The status of one of the elements of self.settings['data_to_read'] is changed  | Key of the element changed, new value of the element
     ##
     # Identifier codes used for view-model communication. Other general-purpose codes are specified in abstract_instrument_interface
     SIG_READING_START = 1
@@ -90,7 +91,8 @@ class interface(abstract_instrument_interface.abstract_interface):
         self.output = {'X':0,'Y':0,'mag':0,'theta':0,'aux1':0,'aux2':0} 
         ### Default values of settings (might be overlapped by settings saved in .json files later)
         self.settings = {   'refresh_time': 0.2,        #default refresh rate, in seconds
-                            'sensitivity_auto': True    #Boolean, true if software-controlled automatic sensitivity is enabled
+                            'sensitivity_auto': True,    #Boolean, true if software-controlled automatic sensitivity is enabled
+                            'data_to_read': {'X':0,'Y':0,'mag':1,'theta':0,'aux1':0,'aux2':0}
                             }
 
         self.list_devices = []          #list of devices found
@@ -157,7 +159,18 @@ class interface(abstract_instrument_interface.abstract_interface):
                                         #for some reason. In this case, it is still useful to have all widgets reset to disconnected state    
     
     def close(self,**kwargs):
-        super().close(**kwargs)                          
+        super().close(**kwargs)         
+
+    def fire_all_signals(self):
+        """
+        Fire all signals, communicating the current value of several parameters. This function is typically called from the GUI after the GUI has been partially
+        initiallized. By making the interface fire all its parameters, the GUI can properly populate all of its field
+        """
+        self.send_list_devices()
+        self.sig_refreshtime.emit(self.settings['refresh_time'])
+        for data_name in self.output.keys():
+            self.sig_data_to_read.emit(data_name,self.settings['data_to_read'][data_name])    
+        self.sig_sensitivity_auto_change.emit(self.settings['sensitivity_auto'])
 
     def set_connected_state(self):
         super().set_connected_state()
@@ -166,6 +179,22 @@ class interface(abstract_instrument_interface.abstract_interface):
         self.read_time_constant()
         self.read_sensitivity()
         self.start_reading()
+
+    def set_data_to_read(self,data_name,acquire):
+        """
+            data_name, str
+                name of data, possible values are given by the keys of self.output
+            acquire, bool
+                if acquire == True, this data will be constantly acquired
+        """
+        try:
+            acquire = bool(acquire)
+        except ValueError:
+            self.logger.error(f"The input argument acquire must be a boolean (or convertible to boolean)")
+            return False
+        if data_name in self.output.keys():
+            self.settings['data_to_read'][data_name] = acquire
+            self.sig_data_to_read.emit(data_name,self.settings['data_to_read'][data_name])
 
     def set_refresh_time(self, refresh_time):
         try: 
@@ -342,13 +371,16 @@ class interface(abstract_instrument_interface.abstract_interface):
         '''
         #self.plot_object.data.setData(list(range(1, len(self.stored_powers)+1)), self.stored_powers) #This line is executed even when self.continuous_read == False, to make sure that plot gets cleared when user press the stop button
         if(self.continuous_read == True):
-            (X,Y,mag,theta,aux1,aux2) = self.instrument.X,self.instrument.Y,self.instrument.mag,self.instrument.theta,self.instrument.aux1,self.instrument.aux2
-            self.output['X'] = X
-            self.output['Y'] = Y
-            self.output['mag'] = mag
-            self.output['theta'] = theta
-            self.output['aux1'] = aux1
-            self.output['aux2'] = aux2
+            for data in self.output.keys():
+                if self.settings['data_to_read'][data] == True:
+                    self.output[data] = getattr(self.instrument, data)
+            # (X,Y,mag,theta,aux1,aux2) = self.instrument.X,self.instrument.Y,self.instrument.mag,self.instrument.theta,self.instrument.aux1,self.instrument.aux2
+            # self.output['X'] = X
+            # self.output['Y'] = Y
+            # self.output['mag'] = mag
+            # self.output['theta'] = theta
+            # self.output['aux1'] = aux1
+            # self.output['aux2'] = aux2
             for k in self.output.keys():	
                 self.stored_data[k].append(self.output[k])
 
@@ -387,6 +419,7 @@ class gui(abstract_instrument_interface.abstract_gui):
         self.interface.sig_list_devices_updated.connect(self.on_list_devices_updated)
         self.interface.sig_connected.connect(self.on_connection_status_change) 
         self.interface.sig_reading.connect(self.on_reading_status_change) 
+        self.interface.sig_data_to_read.connect(self.on_data_to_read_change) 
         self.interface.sig_updated_data.connect(self.on_data_change) 
         self.interface.sig_sensitivity_auto_change.connect(self.on_sensitivity_auto_change) 
         self.interface.sig_read_available_time_constants.connect(self.on_list_time_constants_change)
@@ -397,10 +430,8 @@ class gui(abstract_instrument_interface.abstract_gui):
         self.interface.sig_close.connect(self.on_close)
 
         ### SET INITIAL STATE OF WIDGETS
-        self.edit_RefreshTime.setText(f"{self.interface.settings['refresh_time']:.3f}")
-        self.interface.send_list_devices()  
-        if self.interface.settings['sensitivity_auto']:
-            self.box_SensitivityAuto.setChecked(True)
+        #self.edit_RefreshTime.setText(f"{self.interface.settings['refresh_time']:.3f}")
+        self.interface.fire_all_signals()
         self.on_connection_status_change(self.interface.SIG_DISCONNECTED) #When GUI is created, all widgets are set to the "Disconnected" state    
         ###
 
@@ -459,20 +490,25 @@ class gui(abstract_instrument_interface.abstract_gui):
         fontLabel = QtGui.QFont("Times", 10,QtGui.QFont.Bold)
         fontEdit = QtGui.QFont("Times", 10,QtGui.QFont.Bold)
 
-        self.label_Output = dict()    
+        self.label_Output = dict()   
+        self.checkbox_Output = dict() 
         self.edit_Output = dict() 
         self.widget_Output = dict()     
         for k in self.interface.output.keys():	#Create display textbox for each of the output data of this interface	
-            self.label_Output[k] = Qt.QLabel(f"{k}: ")
-            self.label_Output[k].setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignCenter)
-            self.label_Output[k].setFont(fontLabel)
+            #self.label_Output[k] = Qt.QLabel(f"{k}: ")
+            #self.label_Output[k].setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignCenter)
+            #self.label_Output[k].setFont(fontLabel)
+            self.checkbox_Output[k] = Qt.QCheckBox(f"{k}: ")
+            #self.checkbox_Output[k].setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignCenter)
+            self.checkbox_Output[k].setFont(fontLabel)
             self.edit_Output[k] = Qt.QLineEdit()
             self.edit_Output[k].setFont(fontEdit)
             self.edit_Output[k].setMinimumWidth(60)
             self.edit_Output[k].setAlignment(QtCore.Qt.AlignRight)
             self.edit_Output[k].setReadOnly(True)
             hbox_temp = Qt.QHBoxLayout()
-            hbox_temp.addWidget(self.label_Output[k])
+            #hbox_temp.addWidget(self.label_Output[k])
+            hbox_temp.addWidget(self.checkbox_Output[k])
             hbox_temp.addWidget(self.edit_Output[k],stretch=1)
             self.widget_Output[k] = Qt.QWidget()
             self.widget_Output[k].setLayout(hbox_temp)
@@ -516,6 +552,8 @@ class gui(abstract_instrument_interface.abstract_gui):
         self.box_SensitivityAuto.stateChanged.connect(self.click_box_SensitivityAuto)
         self.button_StartPauseReading.clicked.connect(self.click_button_StartPauseReading)
         self.edit_RefreshTime.returnPressed.connect(self.press_enter_refresh_time)
+        for key in self.checkbox_Output.keys():
+            self.checkbox_Output[key].stateChanged.connect(lambda state, x=key: self.click_box_data_to_change(x,state))
 
 ###########################################################################################################
 ### Event Slots. They are normally triggered by signals from the model, and change the GUI accordingly  ###
@@ -550,6 +588,10 @@ class gui(abstract_instrument_interface.abstract_gui):
     def on_list_devices_updated(self,list_devices):
         self.combo_Devices.clear()  #First we empty the combobox  
         self.combo_Devices.addItems(list_devices) 
+
+    def on_data_to_read_change(self,data,value):
+        self.checkbox_Output[data].setChecked(value)
+        self.edit_Output[data].setEnabled(value)
 
     def on_data_change(self,data):
     #    #Data is (in this case) a list
@@ -603,6 +645,13 @@ class gui(abstract_instrument_interface.abstract_gui):
             self.interface.connect_device(device_full_name)
         elif(self.interface.instrument.connected == True): # We attempt disconnection
             self.interface.disconnect_device()
+
+    def click_box_data_to_change(self,data,state):
+        if state == QtCore.Qt.Checked:
+            self.interface.set_data_to_read(data,True)
+        else:
+            self.interface.set_data_to_read(data,False)
+        return
             
     def click_button_set_auto_scale(self):
         self.interface.set_auto_scale()

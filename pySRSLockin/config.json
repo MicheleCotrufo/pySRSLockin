@@ -1,5 +1,13 @@
 {
     "auto_power_range": true,
-    "refresh_time": 0.1,
+    "data_to_read": {
+        "X": false,
+        "Y": false,
+        "aux1": false,
+        "aux2": false,
+        "mag": true,
+        "theta": false
+    },
+    "refresh_time": 0.2,
     "sensitivity_auto": true
 }
