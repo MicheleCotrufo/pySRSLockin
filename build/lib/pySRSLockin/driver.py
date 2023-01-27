@@ -9,14 +9,23 @@ class SRS_Lockin:
     #then the model device is given by the first string
     model_identifiers = [
                         ['SR865A',  'Stanford_Research_Systems,SR865A'],
+                        ['SR844',   'Stanford_Research_Systems,SR844'],
                         ['SR810',   'Stanford_Research_Systems,SR810']
                         ]
+
+    #Each device has a different set of available sensitivies and time constants. Moreover, they ways that the values are associated to an integer index
+    #might differt between devices. To keep the code general, we define for each device a list of sensitivies and time constants
+    #For example, for device SR865A, there are 22 possible values of time constants, arranged from  1e-6s (index i=0) to 30e3s (index i=22)
+    #However, for the same device the sensitivies are arranged in  decreasing values. There are 28 possible values of sensitivities, 
+    # arranged from  1V (index i=0) to 1e-9V (index i=27)
 
     _sensitivities = {
         'SR865A':[1e-9, 2e-9, 5e-9, 10e-9, 20e-9, 50e-9, 100e-9, 200e-9,
         500e-9, 1e-6, 2e-6, 5e-6, 10e-6, 20e-6, 50e-6, 100e-6,
         200e-6, 500e-6, 1e-3, 2e-3, 5e-3, 10e-3, 20e-3,
         50e-3, 100e-3, 200e-3, 500e-3, 1][::-1], #NOTE: in the model SR865A the sensitivies are arranged in descreasing order
+        'SR844':[100e-9, 300e-9, 1e-6, 3e-6, 10e-6, 30e-6, 100e-6,
+        300e-6, 1e-3, 3e-3, 10e-3, 30e-3, 100e-3, 300e-3, 1],
         'SR810':[2e-9, 5e-9, 10e-9, 20e-9, 50e-9, 100e-9, 200e-9,
         500e-9, 1e-6, 2e-6, 5e-6, 10e-6, 20e-6, 50e-6, 100e-6,
         200e-6, 500e-6, 1e-3, 2e-3, 5e-3, 10e-3, 20e-3,
@@ -24,6 +33,9 @@ class SRS_Lockin:
     }
     _time_constants = {
         'SR865A':[1e-6, 3e-6, 10e-6, 30e-6, 100e-6, 300e-6, 1e-3, 3e-3, 10e-3,
+        30e-3, 100e-3, 300e-3, 1, 3, 10, 30, 100, 300, 1e3,
+        3e3, 10e3, 30e3],
+        'SR844':[100e-6, 300e-6, 1e-3, 3e-3, 10e-3,
         30e-3, 100e-3, 300e-3, 1, 3, 10, 30, 100, 300, 1e3,
         3e3, 10e3, 30e3],
         'SR810':[10e-6, 30e-6, 100e-6, 300e-6, 1e-3, 3e-3, 10e-3,
@@ -36,14 +48,17 @@ class SRS_Lockin:
     #we define a mapping dictionary. Each element of the dictionary has the format
     # 'PropertyName': {'Model1':'Command to send to Model 1 to get this property', 'Model2':'Command to send to Model 2 to get this property', etc}
     mapping_properties = {
-                            'X':            {'SR865A':'OUTP? 0',    'SR810':'OUTP? 1'},
-                            'Y':            {'SR865A':'OUTP? 1',    'SR810':'OUTP? 2'},
-                            'mag':          {'SR865A':'OUTP? 2',    'SR810':'OUTP? 3'},
-                            'theta':        {'SR865A':'OUTP? 3',    'SR810':'OUTP? 4'},
-                            'time_constant':{'SR865A':'OFLT',       'SR810':'OFLT'},
-                            'sensitivity':  {'SR865A':'SCAL',       'SR810':'SENS'},
-                            'frequency':    {'SR865A':'FREQ',       'SR810':'FREQ'},
-                            'phase':        {'SR865A':'PHAS',       'SR810':'PHAS'}
+                            'X':                        {'SR865A':'OUTP? 0',    'SR844':'OUTP? 1',      'SR810':'OUTP? 1'},
+                            'Y':                        {'SR865A':'OUTP? 1',    'SR844':'OUTP? 2',      'SR810':'OUTP? 2'},
+                            'mag':                      {'SR865A':'OUTP? 2',    'SR844':'OUTP? 3',      'SR810':'OUTP? 3'},
+                            'theta':                    {'SR865A':'OUTP? 3',    'SR844':'OUTP? 5',      'SR810':'OUTP? 4'},
+                            'aux1':                     {'SR865A':'OAUX? 0',    'SR844':'AUXI? 1',      'SR810':'OAUX? 1'},
+                            'aux2':                     {'SR865A':'OAUX? 1',    'SR844':'AUXI? 2',      'SR810':'OAUX? 2'},
+                            'time_constant':            {'SR865A':'OFLT',       'SR844':'OFLT',         'SR810':'OFLT'},
+                            'sensitivity':              {'SR865A':'SCAL',       'SR844':'SENS',         'SR810':'SENS'},
+                            'frequency':                {'SR865A':'FREQ',       'SR844':'FREQ',         'SR810':'FREQ'},
+                            'phase':                    {'SR865A':'PHAS',       'SR844':'PHAS',         'SR810':'PHAS'},
+                            'auto_sensitivity':         {'SR865A':'ASCL',       'SR844':'AGAN',         'SR810':'AGAN'}
                             }
 
     def __init__(self,model=None):
@@ -137,7 +152,9 @@ class SRS_Lockin:
                 raise RuntimeError("No device is currently connected.")
             return float(self.instrument.query(self.mapping_properties[name][self.model]))
         return prop   
+
     X,Y,mag,theta = output_property('X'),output_property('Y'),output_property('mag'),output_property('theta')
+    aux1,aux2 = output_property('aux1'),output_property('aux2')
     
     @property
     def time_constants(self):
@@ -177,6 +194,10 @@ class SRS_Lockin:
 
     @time_constant.setter
     def time_constant(self, time_constant):
+        '''
+        time_constant, int
+            integer which defines the desired time_constant, based on the mapping specified in the array self._time_constants
+        '''
         if not(self.connected):
             self._time_constant = None
             raise RuntimeError("No device is currently connected.")
@@ -204,6 +225,10 @@ class SRS_Lockin:
         
     @sensitivity.setter
     def sensitivity(self, sensitivity):
+        '''
+        sensitivity, int
+            integer which defines the desired sensitivity, based on the mapping specified in the array self._sensitivities
+        '''
         if not(self.connected):
             self._time_constant = None
             raise RuntimeError("No device is currently connected.")
@@ -220,7 +245,7 @@ class SRS_Lockin:
     def set_auto_scale(self):
         if(self.connected):
             try:
-                ID = self.instrument.write('ASCL')
+                ID = self.instrument.write(self.mapping_properties['auto_sensitivity'][self.model])
             except visa.VisaIOError:
                 ID = 0
                 pass
