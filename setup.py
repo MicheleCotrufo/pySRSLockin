@@ -2,11 +2,11 @@ import setuptools
 from os import path
 
 this_directory = path.abspath(path.dirname(__file__))
-with open(path.join(this_directory, 'README.md'),encoding ='unicode_escape') as f:
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-with open("requirements.txt") as f:
-    required_packages = f.read().splitlines()
+with open(path.join(this_directory, 'requirements.txt')) as f:
+    required_packages = [l.strip() for l in f if l.strip()]
 
 setuptools.setup(name='pySRSLockin',
       version='1.0.0rc1',

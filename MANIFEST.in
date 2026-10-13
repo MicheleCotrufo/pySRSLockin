@@ -1,3 +1,4 @@
 include pySRSLockin/graphics/*
-include pySRSLockin/*.ini
 include pySRSLockin/*.json
+include requirements.txt
+exclude pySRSLockin/driver_old.py

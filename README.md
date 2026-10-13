@@ -24,7 +24,7 @@ Currently supported models: **SR865A**, **SR844**, **SR810**, **SR510**.
 Use the package manager pip to install,
 
 ```bash
-pip install pySRSLockin
+pip install pysrslockin==1.0.0rc1
 ```
 (the SR510 is supported starting from the version after 0.22).
 
